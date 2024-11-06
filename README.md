@@ -12,6 +12,10 @@ To try out the sample app you can directly import the project from Android Studi
 4. Check out this repository. in utils folder Constants file replace API_KEY
 5. Run the app
 
-<video width="320" height="240" controls>
+<img src="Screenshot_chatbotAi.png" alt="Alt Text" width="1024" height="1024">
+
+[Watch the video](Screen_recording_chatbotAI.mp4)
+
+<video width="640" height="480" controls>
   <source src="Screen_recording_chatbotAI.mp4" type="video/mp4">
 </video>
