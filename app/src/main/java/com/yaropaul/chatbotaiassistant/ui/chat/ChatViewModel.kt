@@ -42,9 +42,6 @@ class ChatViewModel @Inject constructor(
     private val currentUser = User("1", "Yaropaul", "")
     private val chatGptUser = User("2", "ChatGPT", "")
 
-    private val _isListening = MutableStateFlow(false)
-    val isListening: StateFlow<Boolean> = _isListening.asStateFlow()
-
     private val _isConnected = MutableStateFlow(true)
     val isConnected: StateFlow<Boolean> = _isConnected.asStateFlow()
 

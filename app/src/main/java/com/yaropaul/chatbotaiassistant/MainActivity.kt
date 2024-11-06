@@ -15,7 +15,6 @@ import com.yaropaul.chatbotaiassistant.ui.chat.ChatViewModel
 import com.yaropaul.chatbotaiassistant.ui.theme.ChatBotAIAssistantTheme
 import dagger.hilt.android.AndroidEntryPoint
 
-
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
@@ -40,7 +39,6 @@ class MainActivity : ComponentActivity() {
         setContent {
             ChatBotAIAssistantTheme {
                 val messages = chatViewModel.messages.collectAsState().value
-                val isListening = chatViewModel.isListening.collectAsState().value
                 val isConnected = chatViewModel.isConnected.collectAsState().value
                 val errorMessage = chatViewModel.errorMessage.collectAsState().value
                 val isVoiceOn = chatViewModel.isTTSEnabled().collectAsState(initial = false).value
@@ -57,7 +55,6 @@ class MainActivity : ComponentActivity() {
                         chatViewModel.toggleTTS()
                     },
                     isTTSEnabled = isVoiceOn,
-                    isListening = isListening,
                     isConnected = isConnected,
                     errorMessage = errorMessage,
                     currentUser = currentUser,
