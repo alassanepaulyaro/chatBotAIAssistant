@@ -1,7 +1,7 @@
 package com.yaropaul.chatbotaiassistant.data.model
 
 data class ChatRequest(
-    val model: String = "gpt-3.5-turbo",
+    val model: String = "gpt-5-nano",
     val messages: List<MessageRequest>
 )
 

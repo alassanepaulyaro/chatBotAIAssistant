@@ -33,7 +33,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Snackbar
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -53,40 +54,59 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.input.TextFieldValue
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.constraintlayout.compose.ConstraintLayout
 import androidx.constraintlayout.compose.Dimension
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.yaropaul.chatbotaiassistant.R
-import com.yaropaul.chatbotaiassistant.data.model.Message
-import com.yaropaul.chatbotaiassistant.data.model.User
-import com.yaropaul.chatbotaiassistant.ui.theme.ChatBotAIAssistantTheme
-import com.yaropaul.chatbotaiassistant.utils.Event
-import kotlinx.coroutines.delay
+import com.yaropaul.chatbotaiassistant.domain.model.ChatMessage
+import com.yaropaul.chatbotaiassistant.presentation.chat.ChatUiEvent
+import com.yaropaul.chatbotaiassistant.presentation.chat.ChatUiState
+import kotlinx.coroutines.flow.Flow
 import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.Locale
 
+/**
+ * ChatScreen compatible with Clean Architecture.
+ * Uses ChatUiState and ChatMessage (domain model) instead of multiple parameters.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(
-    messages: List<Message>,
+    uiState: ChatUiState,
+    events: Flow<ChatUiEvent>,
     onSendMessage: (String) -> Unit,
     onClearMessages: () -> Unit,
     onToggleTTS: () -> Unit,
-    isTTSEnabled: Boolean,
-    isConnected: Boolean,
-    errorMessage: Event<String>?,
-    currentUser: User,
-    chatGptUser: User
+    onEvent: (ChatUiEvent) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     var userInput by remember { mutableStateOf(TextFieldValue("")) }
     var showDeleteConfirmationDialog by remember { mutableStateOf(false) }
     var showNoConnectionDialog by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
 
+    // Handle events from ViewModel
+    LaunchedEffect(Unit) {
+        events.collect { event ->
+            when (event) {
+                is ChatUiEvent.ShowError -> {
+                    snackbarHostState.showSnackbar(event.message)
+                }
+                is ChatUiEvent.SpeakText -> {
+                    onEvent(event)
+                }
+                is ChatUiEvent.MessageSent -> {
+                    // Message sent successfully
+                }
+                is ChatUiEvent.MessagesCleared -> {
+                    // Messages cleared
+                }
+            }
+        }
+    }
 
     // Managing microphone permissions
     val microphonePermission = rememberLauncherForActivityResult(
@@ -101,27 +121,25 @@ fun ChatScreen(
         microphonePermission.launch(android.Manifest.permission.RECORD_AUDIO)
     }
 
-    // Managing the display of error messages
-    var showError by remember { mutableStateOf(false) }
-    var errorText by remember { mutableStateOf("") }
-
-    errorMessage?.getContentIfNotHandled()?.let { message ->
-        showError = true
-        errorText = message
-    }
-
-    // Observe changes to isConnected to show the dialog
-    LaunchedEffect(isConnected) {
-        if (!isConnected) {
+    // Show connection dialog when disconnected
+    LaunchedEffect(uiState.isConnected) {
+        if (!uiState.isConnected) {
             showNoConnectionDialog = true
         }
     }
 
-    // Configures the scrolling behavior for the TopAppBar
+    // Show error message in snackbar
+    LaunchedEffect(uiState.errorMessage) {
+        uiState.errorMessage?.let { error ->
+            snackbarHostState.showSnackbar(error)
+        }
+    }
+
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
 
     Scaffold(
-        modifier = Modifier.fillMaxSize(),
+        modifier = modifier.fillMaxSize(),
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             Column {
                 TopAppBar(
@@ -133,8 +151,7 @@ fun ChatScreen(
                     actions = {
                         IconButton(
                             onClick = { showDeleteConfirmationDialog = true },
-                            modifier = Modifier
-                                .size(48.dp),
+                            modifier = Modifier.size(48.dp),
                         ) {
                             Icon(
                                 imageVector = ImageVector.vectorResource(id = R.drawable.ic_clear_all),
@@ -142,18 +159,16 @@ fun ChatScreen(
                             )
                         }
                         Spacer(modifier = Modifier.width(8.dp))
-                        // IconButton
                         IconButton(
                             onClick = onToggleTTS,
-                            modifier = Modifier
-                                .size(48.dp),
+                            modifier = Modifier.size(48.dp),
                         ) {
                             Icon(
-                                imageVector = if (isTTSEnabled)
+                                imageVector = if (uiState.isTtsEnabled)
                                     ImageVector.vectorResource(id = R.drawable.ic_voice_over_on)
                                 else
                                     ImageVector.vectorResource(id = R.drawable.ic_voice_over_off),
-                                contentDescription = if (isTTSEnabled) "Voice On" else "Voice Off"
+                                contentDescription = if (uiState.isTtsEnabled) "Voice On" else "Voice Off"
                             )
                         }
                     },
@@ -170,7 +185,8 @@ fun ChatScreen(
                         onSendMessage(userInput.text)
                         userInput = TextFieldValue("")
                     }
-                }
+                },
+                isLoading = uiState.isLoading
             )
         },
         content = { paddingValues ->
@@ -180,48 +196,27 @@ fun ChatScreen(
                     .padding(paddingValues)
             ) {
                 MessagesList(
-                    messages = messages,
-                    currentUser = currentUser,
-                    chatGptUser = chatGptUser,
+                    messages = uiState.messages,
+                    currentUserId = uiState.currentUserId,
+                    aiUserId = uiState.aiUserId,
                     modifier = Modifier.fillMaxSize()
                 )
-
-                // Showing Snack bar for errors
-                ShowingSnackBar(showError, errorText)
             }
 
             // Delete confirmation dialog
             DeleteConfirmationDialog(
                 showDeleteConfirmationDialog,
                 onClearMessages,
-                onDismiss = { showDeleteConfirmationDialog = false })
+                onDismiss = { showDeleteConfirmationDialog = false }
+            )
 
             // No internet connection dialog
-            ConnectionDialog(showNoConnectionDialog, onDismiss = { showNoConnectionDialog = false })
+            ConnectionDialog(
+                showNoConnectionDialog,
+                onDismiss = { showNoConnectionDialog = false }
+            )
         }
     )
-}
-
-@Composable
-private fun ShowingSnackBar(showError: Boolean, errorText: String) {
-    var showError1 = showError
-    if (showError1) {
-        LaunchedEffect(Unit) {
-            delay(2000)
-            showError1 = false
-        }
-        Snackbar(
-            modifier = Modifier.padding(8.dp),
-            action = {
-                TextButton(onClick = { showError1 = false }) {
-                    Text("Close")
-                }
-            },
-            containerColor = Color.Red
-        ) {
-            Text(text = errorText, color = Color.White)
-        }
-    }
 }
 
 @Composable
@@ -232,9 +227,7 @@ private fun ConnectionDialog(showNoConnectionDialog: Boolean, onDismiss: () -> U
             title = { Text("No internet connection") },
             text = { Text("Please check your internet connection") },
             confirmButton = {
-                Button(onClick = {
-                    onDismiss()
-                }) {
+                Button(onClick = { onDismiss() }) {
                     Text("OK")
                 }
             }
@@ -270,12 +263,12 @@ private fun DeleteConfirmationDialog(
     }
 }
 
-
 @Composable
 fun BottomInputBar(
     userInput: TextFieldValue,
     onUserInputChange: (TextFieldValue) -> Unit,
     onSendMessage: () -> Unit,
+    isLoading: Boolean,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -320,7 +313,8 @@ fun BottomInputBar(
                 focusedTextColor = MaterialTheme.colorScheme.onBackground
             ),
             shape = RoundedCornerShape(12.dp),
-            singleLine = true
+            singleLine = true,
+            enabled = !isLoading
         )
 
         // Microphone Button
@@ -341,7 +335,8 @@ fun BottomInputBar(
                     end.linkTo(sendButton.start, margin = 8.dp)
                 }
                 .size(48.dp)
-                .clipToBounds()
+                .clipToBounds(),
+            enabled = !isLoading
         ) {
             Icon(
                 imageVector = ImageVector.vectorResource(id = R.drawable.ic_mic_none),
@@ -357,7 +352,8 @@ fun BottomInputBar(
                 .constrainAs(sendButton) {
                     end.linkTo(parent.end)
                 },
-            interactionSource = remember { MutableInteractionSource() }
+            interactionSource = remember { MutableInteractionSource() },
+            enabled = !isLoading
         ) {
             Icon(
                 imageVector = ImageVector.vectorResource(id = R.drawable.ic_send),
@@ -369,9 +365,9 @@ fun BottomInputBar(
 
 @Composable
 fun MessagesList(
-    messages: List<Message>,
-    currentUser: User,
-    chatGptUser: User,
+    messages: List<ChatMessage>,
+    currentUserId: String,
+    aiUserId: String,
     modifier: Modifier = Modifier
 ) {
     LazyColumn(
@@ -382,8 +378,8 @@ fun MessagesList(
         items(messages.reversed()) { message ->
             MessageItem(
                 message = message,
-                currentUser = currentUser,
-                chatGptUser = chatGptUser
+                currentUserId = currentUserId,
+                aiUserId = aiUserId
             )
         }
     }
@@ -391,15 +387,15 @@ fun MessagesList(
 
 @Composable
 fun MessageItem(
-    message: Message,
-    currentUser: User,
-    chatGptUser: User
+    message: ChatMessage,
+    currentUserId: String,
+    aiUserId: String
 ) {
-    val isCurrentUser = message.userId == currentUser.id
-    val isChatGptUser = message.userId == chatGptUser.id
+    val isCurrentUser = message.senderId == currentUserId
+    val isAiUser = message.senderId == aiUserId
     val backgroundColor = when {
         isCurrentUser -> Color(0xFF2196F3)
-        isChatGptUser -> Color(0xFFE0E0E0)
+        isAiUser -> Color(0xFFE0E0E0)
         else -> Color.White
     }
     val textColor = if (isCurrentUser) Color.White else Color.Black
@@ -409,8 +405,8 @@ fun MessageItem(
 
     // Formatting the date to display "Tuesday - 11:52"
     val sdf = remember { SimpleDateFormat("EEEE - HH:mm", Locale.getDefault()) }
-    val formattedDate = remember(message.date) {
-        sdf.format(message.date).replaceFirstChar { it.uppercase() }
+    val formattedDate = remember(message.timestamp) {
+        sdf.format(message.timestamp).replaceFirstChar { it.uppercase() }
     }
 
     Column(
@@ -454,84 +450,4 @@ fun MessageItem(
             modifier = Modifier.padding(top = 2.dp)
         )
     }
-}
-
-
-@Preview(showBackground = true)
-@Composable
-fun ChatScreenLightPreview() {
-    ChatBotAIAssistantTheme(darkTheme = false) {
-        ChatScreen(
-            messages = sampleMessagesContent(),
-            onSendMessage = {},
-            onClearMessages = {},
-            onToggleTTS = {},
-            isTTSEnabled = false,
-            isConnected = true,
-            errorMessage = null,
-            currentUser = User("1", "User", ""),
-            chatGptUser = User("2", "ChatGPT", "")
-        )
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-fun ChatScreenDarkPreview() {
-    ChatBotAIAssistantTheme(darkTheme = true) {
-        ChatScreen(
-            messages = sampleMessagesContent(),
-            onSendMessage = {},
-            onClearMessages = {},
-            onToggleTTS = {},
-            isTTSEnabled = true,
-            isConnected = false,
-            errorMessage = null,
-            currentUser = User("1", "User", ""),
-            chatGptUser = User("2", "ChatGPT", "")
-        )
-    }
-}
-
-private fun sampleMessagesContent(): List<Message> {
-    val currentUser = User("1", "User", "")
-    val chatGptUser = User("2", "ChatGPT", "")
-    return listOf(
-        Message(
-            id = "1",
-            text = "Bonjour, comment ça va ?",
-            userId = currentUser.id,
-            userName = currentUser.name,
-            userAvatar = currentUser.avatar,
-            date = Date(),
-            imageUrl = null
-        ),
-        Message(
-            id = "2",
-            text = "Je vais bien, merci ! Comment puis-je vous aider aujourd'hui ?",
-            userId = chatGptUser.id,
-            userName = chatGptUser.name,
-            userAvatar = chatGptUser.avatar,
-            date = Date(),
-            imageUrl = null
-        ),
-        Message(
-            id = "3",
-            text = "Pouvez-vous me donner la météo pour aujourd'hui ?",
-            userId = currentUser.id,
-            userName = currentUser.name,
-            userAvatar = currentUser.avatar,
-            date = Date(),
-            imageUrl = null
-        ),
-        Message(
-            id = "4",
-            text = "Bien sûr ! Aujourd'hui, il fera ensoleillé avec une température maximale de 25 degrés.",
-            userId = chatGptUser.id,
-            userName = chatGptUser.name,
-            userAvatar = chatGptUser.avatar,
-            date = Date(),
-            imageUrl = null
-        )
-    )
 }

@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.jetbrains.kotlin.android)
@@ -8,12 +10,12 @@ plugins {
 
 android {
     namespace = "com.yaropaul.chatbotaiassistant"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.yaropaul.chatbotaiassistant"
         minSdk = 24
-        targetSdk = 34
+        targetSdk = 35
         versionCode = 1
         versionName = "1.0"
 
@@ -21,6 +23,17 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
+
+        // Load API keys from local.properties
+        val localPropertiesFile = rootProject.file("local.properties")
+        val localProperties = Properties()
+        if (localPropertiesFile.exists()) {
+            localProperties.load(localPropertiesFile.inputStream())
+        }
+
+        // Inject API key into BuildConfig
+        val apiKey = localProperties.getProperty("OPENAI_API_KEY") ?: ""
+        buildConfigField("String", "OPENAI_API_KEY", "\"$apiKey\"")
     }
 
     buildTypes {
@@ -41,6 +54,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.1"
@@ -63,11 +77,25 @@ dependencies {
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
     implementation(libs.androidx.constraintlayout.compose)
+
+    // Testing dependencies
     testImplementation(libs.junit)
+    testImplementation(libs.mockk.android)
+    testImplementation(libs.mockk.agent)
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.turbine)
+    testImplementation(libs.truth)
+
+    // Android Testing
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.ui.test.junit4)
+    androidTestImplementation(libs.hilt.android.testing)
+    androidTestImplementation(libs.truth)
+    kspAndroidTest(libs.hilt.compiler)
+
+    // Debug
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
 
@@ -97,9 +125,6 @@ dependencies {
 
     // Speech Recognition and Text-to-Speech
     implementation (libs.androidx.core.ktx)
-
-    // Accompanist Insets (for status bar padding)
-    implementation (libs.accompanist.insets)
 
     // Permissions
     implementation (libs.accompanist.permissions)

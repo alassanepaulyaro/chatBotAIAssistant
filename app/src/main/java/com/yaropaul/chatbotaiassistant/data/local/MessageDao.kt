@@ -5,11 +5,15 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import com.yaropaul.chatbotaiassistant.data.model.Message
+import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface MessageDao {
     @Query("SELECT * FROM messages ORDER BY date ASC")
     suspend fun getAllMessages(): List<Message>
+
+    @Query("SELECT * FROM messages ORDER BY date ASC")
+    fun getAllMessagesFlow(): Flow<List<Message>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertMessage(message: Message)
